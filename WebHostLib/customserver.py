@@ -100,6 +100,8 @@ class WebHostContext(Context):
         else:
             self.port = get_random_port()
 
+        self.tracker_token = room.tracker_token
+
         multidata = self.decompress(room.seed.multidata)
         game_data_packages = {}
 
