@@ -41,6 +41,12 @@
             </span>
             in the <a href="{{ url_for("tutorial_landing")}}">client</a>.<br>
         {% endif %}
+        {% if room.tracker_token %}
+            You can connect your tracker using <span class="interactive"
+            data-tooltip="This token can be used to connect to the tracker endpoint.">
+            '{{ room.tracker_token }}'
+            </span>.
+        {% endif %}
         {{ macros.list_patches_room(room) }}
         {% if room.owner == session["_id"] %}
             <div style="display: flex; align-items: center;">

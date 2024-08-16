@@ -2,6 +2,8 @@ from datetime import datetime
 from uuid import UUID, uuid4
 from pony.orm import Database, PrimaryKey, Required, Set, Optional, buffer, LongStr
 
+from WebHostLib import B64UUIDConverter
+
 db = Database()
 
 STATE_QUEUED = 0
@@ -31,6 +33,7 @@ class Room(db.Entity):
     tracker = Optional(UUID, index=True)
     # Port special value -1 means the server errored out. Another attempt can be made with a page refresh
     last_port = Optional(int, default=lambda: 0)
+    tracker_token = Optional(str, default=lambda: B64UUIDConverter(None).to_url(uuid4()))
 
 
 class Seed(db.Entity):
