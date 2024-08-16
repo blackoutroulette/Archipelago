@@ -21,6 +21,7 @@ import time
 import typing
 import weakref
 import zlib
+from uuid import UUID
 
 import ModuleUpdate
 
@@ -129,6 +130,7 @@ class Client(Endpoint):
         self.auth = False
         self.team = None
         self.slot = None
+        self.is_tracker = False
         self.send_index = 0
         self.tags = []
         self.messageprocessor = client_message_processor(ctx, self)
@@ -217,6 +219,7 @@ class Context:
         self.allow_releases = {}
         self.host = host
         self.port = port
+        self.tracker_token: typing.Optional[str] = None
         self.server_password = server_password
         self.password = password
         self.server = None
@@ -885,6 +888,9 @@ async def on_client_joined(ctx: Context, client: Client):
 
 
 async def on_client_left(ctx: Context, client: Client):
+    if client.is_tracker:
+        return
+
     if len(ctx.clients[client.team][client.slot]) < 1:
         update_client_status(ctx, client, ClientStatus.CLIENT_UNKNOWN)
         ctx.client_connection_timers[client.team, client.slot] = datetime.datetime.now(datetime.timezone.utc)
@@ -1679,7 +1685,7 @@ async def process_client_cmd(ctx: Context, client: Client, args: dict):
 
     if cmd == 'Connect':
         if not args or 'password' not in args or type(args['password']) not in [str, type(None)] or \
-                'game' not in args:
+                (args['name'] != ctx.tracker_token and 'game' not in args):
             await ctx.send_msgs(client, [{'cmd': 'InvalidPacket', "type": "arguments", 'text': 'Connect',
                                           "original_cmd": cmd}])
             return
@@ -1688,7 +1694,11 @@ async def process_client_cmd(ctx: Context, client: Client, args: dict):
         if ctx.password and args['password'] != ctx.password:
             errors.add('InvalidPassword')
 
-        if args['name'] not in ctx.connect_names:
+        if args['name'] == ctx.tracker_token:
+            minver = min_client_version
+            if minver > tuple(args['version']):
+                errors.add('IncompatibleVersion')
+        elif args['name'] not in ctx.connect_names:
             errors.add('InvalidSlot')
         else:
             team, slot = ctx.connect_names[args['name']]
@@ -1712,6 +1722,16 @@ async def process_client_cmd(ctx: Context, client: Client, args: dict):
         if errors:
             ctx.logger.info(f"A client connection was refused due to: {errors}, the sent connect information was {args}.")
             await ctx.send_msgs(client, [{"cmd": "ConnectionRefused", "errors": list(errors)}])
+        elif args['name'] == ctx.tracker_token:
+            client.team = None
+            client.slot = None
+            client.auth = True
+            client.version = args['version']
+            client.tags = ["Tracker"]
+            client.no_locations = True
+            client.is_tracker = True
+            reply = [{"cmd": "Connected"}]
+            await ctx.send_msgs(client, reply)
         else:
             team, slot = ctx.connect_names[args['name']]
             if client.auth and client.team is not None and client.slot in ctx.clients[client.team]:
@@ -1769,6 +1789,28 @@ async def process_client_cmd(ctx: Context, client: Client, args: dict):
             await ctx.send_msgs(client, [{"cmd": "DataPackage",
                                           "data": {"games": ctx.gamespackage}}])
 
+    elif client.is_tracker and client.auth:
+        if cmd == "GetChecks":
+            errors = set()
+            if "players" not in args or not isinstance(args["players"], list) or not args["players"]:
+                errors.add("InvalidPlayers")
+            slot_ids = {id_: i for i in range(len(ctx.clients)) for id_ in ctx.clients[i]}
+            if any(player_id not in slot_ids for player_id in args["players"]):
+                errors.add("InvalidPlayerID")
+            # if "item_importance" not in args or not isinstance(args["item_importance"], int) and args["item_importance"] not in range(8):
+            #     errors.add("InvalidItemImportance")
+            if errors:
+                await ctx.send_msgs(client, [{'cmd': 'InvalidPacket', "type": "arguments", "text": {list(errors)},
+                                          "original_cmd": cmd}])
+            else:
+                players = args["players"]
+
+                packets = []
+                for slot in players:
+                    start_inventory = get_start_inventory(ctx, slot, True)
+                    items = get_received_items(ctx, slot_ids[slot], slot, True)
+                    packets.append({"cmd": "ReceivedItems", "player": slot, "items": start_inventory + items})
+                await ctx.send_msgs(client, packets)
     elif client.auth:
         if cmd == "ConnectUpdate":
             if not args:
@@ -1853,14 +1895,14 @@ async def process_client_cmd(ctx: Context, client: Client, args: dict):
         elif cmd == "Bounce":
             games = set(args.get("games", []))
             tags = set(args.get("tags", []))
-            slots = set(args.get("slots", []))
+            slot_ids = set(args.get("slots", []))
             args["cmd"] = "Bounced"
             msg = ctx.dumper([args])
 
             for bounceclient in ctx.endpoints:
                 if client.team == bounceclient.team and (ctx.games[bounceclient.slot] in games or
                                                          set(bounceclient.tags) & tags or
-                                                         bounceclient.slot in slots):
+                                                         bounceclient.slot in slot_ids):
                     await ctx.send_encoded_msgs(bounceclient, msg)
 
         elif cmd == "Get":

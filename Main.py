@@ -101,8 +101,8 @@ def main(args, seed=None, baked_server_options: Optional[Dict[str, object]] = No
             # remove from_pool items also from early items handling, as starting is plenty early.
             early = multiworld.early_items[player].get(item_name, 0)
             if early:
-                multiworld.early_items[player][item_name] = max(0, early-count)
-                remaining_count = count-early
+                multiworld.early_items[player][item_name] = max(0, early - count)
+                remaining_count = count - early
                 if remaining_count > 0:
                     local_early = multiworld.local_early_items[player].get(item_name, 0)
                     if local_early:
@@ -127,7 +127,8 @@ def main(args, seed=None, baked_server_options: Optional[Dict[str, object]] = No
 
     for player in multiworld.player_ids:
         exclusion_rules(multiworld, player, multiworld.worlds[player].options.exclude_locations.value)
-        multiworld.worlds[player].options.priority_locations.value -= multiworld.worlds[player].options.exclude_locations.value
+        multiworld.worlds[player].options.priority_locations.value -= multiworld.worlds[
+            player].options.exclude_locations.value
         world_excluded_locations = set()
         for location_name in multiworld.worlds[player].options.priority_locations.value:
             try:
@@ -138,7 +139,8 @@ def main(args, seed=None, baked_server_options: Optional[Dict[str, object]] = No
             if location.progress_type != LocationProgressType.EXCLUDED:
                 location.progress_type = LocationProgressType.PRIORITY
             else:
-                logger.warning(f"Unable to prioritize location \"{location_name}\" in player {player}'s world because the world excluded it.")
+                logger.warning(
+                    f"Unable to prioritize location \"{location_name}\" in player {player}'s world because the world excluded it.")
                 world_excluded_locations.add(location_name)
         multiworld.worlds[player].options.priority_locations.value -= world_excluded_locations
 
@@ -148,12 +150,13 @@ def main(args, seed=None, baked_server_options: Optional[Dict[str, object]] = No
     else:
         multiworld.worlds[1].options.non_local_items.value = set()
         multiworld.worlds[1].options.local_items.value = set()
-    
+
     AutoWorld.call_all(multiworld, "generate_basic")
 
     # remove starting inventory from pool items.
     # Because some worlds don't actually create items during create_items this has to be as late as possible.
-    if any(getattr(multiworld.worlds[player].options, "start_inventory_from_pool", None) for player in multiworld.player_ids):
+    if any(getattr(multiworld.worlds[player].options, "start_inventory_from_pool", None) for player in
+           multiworld.player_ids):
         new_items: List[Item] = []
         old_items: List[Item] = []
         depletion_pool: Dict[int, Dict[str, int]] = {
@@ -174,7 +177,7 @@ def main(args, seed=None, baked_server_options: Optional[Dict[str, object]] = No
                 depletion_pool[item.player][item.name] -= 1
                 # quick abort if we have found all items
                 if not target:
-                    old_items.extend(multiworld.itempool[i+1:])
+                    old_items.extend(multiworld.itempool[i + 1:])
                     break
             else:
                 old_items.append(item)
@@ -185,7 +188,7 @@ def main(args, seed=None, baked_server_options: Optional[Dict[str, object]] = No
                 remaining_items = {name: count for name, count in remaining_items.items() if count}
                 if remaining_items:
                     logger.warning(f"{multiworld.get_player_name(player)}"
-                                    f" is trying to remove items from their pool that don't exist: {remaining_items}")
+                                   f" is trying to remove items from their pool that don't exist: {remaining_items}")
                     # find all filler we generated for the current player and remove until it matches 
                     removables = [item for item in new_items if item.player == player]
                     for _ in range(sum(remaining_items.values())):
@@ -264,11 +267,13 @@ def main(args, seed=None, baked_server_options: Optional[Dict[str, object]] = No
                                                            multiworld.player_types[slot])
                 for slot, group in multiworld.groups.items():
                     games[slot] = multiworld.game[slot]
-                    slot_info[slot] = NetUtils.NetworkSlot(group["name"], multiworld.game[slot], multiworld.player_types[slot],
+                    slot_info[slot] = NetUtils.NetworkSlot(group["name"], multiworld.game[slot],
+                                                           multiworld.player_types[slot],
                                                            group_members=sorted(group["players"]))
                 precollected_items = {player: [item.code for item in world_precollected if type(item.code) == int]
                                       for player, world_precollected in multiworld.precollected_items.items()}
-                precollected_hints = {player: set() for player in range(1, multiworld.players + 1 + len(multiworld.groups))}
+                precollected_hints = {player: set() for player in
+                                      range(1, multiworld.players + 1 + len(multiworld.groups))}
 
                 for slot in multiworld.player_ids:
                     slot_data[slot] = multiworld.worlds[slot].fill_slot_data()
@@ -284,7 +289,8 @@ def main(args, seed=None, baked_server_options: Optional[Dict[str, object]] = No
                         for player in multiworld.groups[location.item.player]["players"]:
                             precollected_hints[player].add(hint)
 
-                locations_data: Dict[int, Dict[int, Tuple[int, int, int]]] = {player: {} for player in multiworld.player_ids}
+                locations_data: Dict[int, Dict[int, Tuple[int, int, int]]] = {player: {} for player in
+                                                                              multiworld.player_ids}
                 for location in multiworld.get_filled_locations():
                     if type(location.address) == int:
                         assert location.item.code is not None, "item code None should be event, " \
@@ -377,3 +383,7 @@ def main(args, seed=None, baked_server_options: Optional[Dict[str, object]] = No
 
     logger.info('Done. Enjoy. Total Time: %s', time.perf_counter() - start)
     return multiworld
+
+
+if __name__ == '__main__':
+    main()
