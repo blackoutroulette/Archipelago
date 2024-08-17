@@ -721,6 +721,13 @@ class Context:
             hints = [hint for hint in hints if hint not in self.hints[team, hint.finding_player]]
         if not hints:
             return
+
+        # send hints to tracker endpoints
+        hint_dicts = [hint.as_network_message() for hint in hints]
+        for client in self.endpoints:
+            if client.is_tracker:
+                async_start(self.send_msgs(client, hint_dicts))
+
         new_hint_events: typing.Set[int] = set()
         concerns = collections.defaultdict(list)
         for hint in sorted(hints, key=operator.attrgetter('found'), reverse=True):
@@ -1035,11 +1042,18 @@ def register_location_checks(ctx: Context, team: int, slot: int, locations: typi
                              count_activity: bool = True):
     new_locations = set(locations) - ctx.location_checks[team, slot]
     new_locations.intersection_update(ctx.locations[slot])  # ignore location IDs unknown to this multidata
+    new_items: typing.List[typing.Dict[str, int]] = []
     if new_locations:
         if count_activity:
             ctx.client_activity_timers[team, slot] = datetime.datetime.now(datetime.timezone.utc)
         for location in new_locations:
             item_id, target_player, flags = ctx.locations[slot][location]
+            new_items.append({
+                "item": item_id,
+                "location": location,
+                "receiver": target_player,
+                "item_importance": flags
+            })
             new_item = NetworkItem(item_id, location, slot, flags)
             send_items_to(ctx, team, target_player, new_item)
 
@@ -1051,6 +1065,17 @@ def register_location_checks(ctx: Context, team: int, slot: int, locations: typi
 
         ctx.location_checks[team, slot] |= new_locations
         send_new_items(ctx)
+
+        # send update to all tracker endpoints
+        tracker_msg = [{
+            "cmd": "ReceivedItems",
+            "finder": slot,
+            "items": new_items
+        }]
+        for client in ctx.endpoints:
+            if client.is_tracker:
+                async_start(ctx.send_msgs(client, tracker_msg))
+
         ctx.broadcast(ctx.clients[team][slot], [{
             "cmd": "RoomUpdate",
             "hint_points": get_slot_points(ctx, team, slot),
